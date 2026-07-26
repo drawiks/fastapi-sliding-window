@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 
-from fastapi_rate_limit._backends.base import RateLimitBackend, RateLimitResult
+from fastapi_sliding_window._backends.base import RateLimitBackend, RateLimitResult
 
 
 class SlidingWindowCounterBackend(RateLimitBackend):

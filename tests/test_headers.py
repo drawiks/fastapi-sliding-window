@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from fastapi_rate_limit._backends.base import RateLimitResult
-from fastapi_rate_limit._headers import rate_limit_headers
+from fastapi_sliding_window._backends.base import RateLimitResult
+from fastapi_sliding_window._headers import rate_limit_headers
 
 
 def test_headers_include_all_fields() -> None:

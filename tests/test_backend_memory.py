@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from fastapi_rate_limit._backends.memory import InMemoryBackend
+from fastapi_sliding_window._backends.memory import InMemoryBackend
 
 
 @pytest.mark.asyncio

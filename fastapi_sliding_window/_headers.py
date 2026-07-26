@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 
-from fastapi_rate_limit._backends.base import RateLimitResult
+from fastapi_sliding_window._backends.base import RateLimitResult
 
 
 def rate_limit_headers(result: RateLimitResult) -> dict[str, str]:

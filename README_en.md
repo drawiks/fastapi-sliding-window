@@ -1,12 +1,12 @@
 <div align="center">
-    <h1>⚡ fastapi-rate-limit</h1>
-    <a href="https://pypi.org/project/fastapi-rate-limit/">
-        <img alt="PyPI version" src="https://img.shields.io/pypi/v/fastapi-rate-limit?color=blue">
+    <h1>⚡ fastapi-sliding-window</h1>
+    <a href="https://pypi.org/project/fastapi-sliding-window/">
+        <img alt="PyPI version" src="https://img.shields.io/pypi/v/fastapi-sliding-window?color=blue">
     </a>
     <img height="20" alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10+-blue">
     <img height="20" alt="License MIT" src="https://img.shields.io/badge/license-MIT-green">
     <img height="20" alt="Status" src="https://img.shields.io/badge/status-stable-brightgreen">
-    <p><strong>fastapi-rate-limit</strong> — sliding window rate limiter for FastAPI</p>
+    <p><strong>fastapi-sliding-window</strong> — sliding window rate limiter for FastAPI</p>
     <blockquote>(─‿‿─)</blockquote>
 </div>
 
@@ -30,7 +30,7 @@
 ## **📦 installation**
 
 ```bash
-pip install fastapi-rate-limit
+pip install fastapi-sliding-window
 ```
 
 ---
@@ -39,7 +39,7 @@ pip install fastapi-rate-limit
 
 ```python
 from fastapi import FastAPI, Depends
-from fastapi_rate_limit import RateLimit
+from fastapi_sliding_window import RateLimit
 
 app = FastAPI()
 
@@ -67,7 +67,7 @@ async def login():
 
 ```python
 from fastapi import Depends
-from fastapi_rate_limit import RateLimit, Algorithm
+from fastapi_sliding_window import RateLimit, Algorithm
 
 # Sliding Window Log (default, most accurate)
 @app.get("/api/data", dependencies=[
@@ -97,7 +97,7 @@ async def profile():
 ### Middleware (global)
 
 ```python
-from fastapi_rate_limit import RateLimitMiddleware, Algorithm
+from fastapi_sliding_window import RateLimitMiddleware, Algorithm
 
 app.add_middleware(
     RateLimitMiddleware,
@@ -175,4 +175,4 @@ Starlette middleware for global rate limiting.
 ---
 
 ## **📜 license**
-[MIT](https://github.com/drawiks/fastapi-rate-limit/blob/main/LICENSE)
+[MIT](https://github.com/drawiks/fastapi-sliding-window/blob/main/LICENSE)

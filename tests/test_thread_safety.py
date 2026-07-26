@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import pytest
-from fastapi_rate_limit._algorithms.sliding_window_log import SlidingWindowLogBackend
-from fastapi_rate_limit._backends.memory import InMemoryBackend
+from fastapi_sliding_window._algorithms.sliding_window_log import SlidingWindowLogBackend
+from fastapi_sliding_window._backends.memory import InMemoryBackend
 
 
 @pytest.mark.asyncio

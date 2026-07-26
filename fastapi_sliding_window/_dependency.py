@@ -5,10 +5,10 @@ import time
 from starlette.requests import Request
 from starlette.responses import Response
 
-from fastapi_rate_limit._exceptions import RateLimitExceeded
-from fastapi_rate_limit._headers import rate_limit_headers
-from fastapi_rate_limit._types import Algorithm, KeyFunc
-from fastapi_rate_limit._utils import default_key_func, make_backend, resolve_key
+from fastapi_sliding_window._exceptions import RateLimitExceeded
+from fastapi_sliding_window._headers import rate_limit_headers
+from fastapi_sliding_window._types import Algorithm, KeyFunc
+from fastapi_sliding_window._utils import default_key_func, make_backend, resolve_key
 
 
 class RateLimit:

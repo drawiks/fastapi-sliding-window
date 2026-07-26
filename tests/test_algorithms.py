@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from fastapi_rate_limit._algorithms.sliding_window_log import SlidingWindowLogBackend
+from fastapi_sliding_window._algorithms.sliding_window_log import SlidingWindowLogBackend
 
 
 @pytest.mark.asyncio

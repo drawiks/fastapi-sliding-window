@@ -4,7 +4,7 @@ import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
-from fastapi_rate_limit import RateLimitMiddleware
+from fastapi_sliding_window import RateLimitMiddleware
 
 
 @pytest.fixture

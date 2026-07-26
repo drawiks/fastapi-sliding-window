@@ -4,11 +4,11 @@ from collections.abc import Awaitable
 
 from starlette.requests import Request
 
-from fastapi_rate_limit._algorithms.fixed_window import FixedWindowBackend
-from fastapi_rate_limit._algorithms.sliding_window_counter import SlidingWindowCounterBackend
-from fastapi_rate_limit._algorithms.sliding_window_log import SlidingWindowLogBackend
-from fastapi_rate_limit._backends.base import RateLimitBackend
-from fastapi_rate_limit._types import Algorithm, KeyFunc
+from fastapi_sliding_window._algorithms.fixed_window import FixedWindowBackend
+from fastapi_sliding_window._algorithms.sliding_window_counter import SlidingWindowCounterBackend
+from fastapi_sliding_window._algorithms.sliding_window_log import SlidingWindowLogBackend
+from fastapi_sliding_window._backends.base import RateLimitBackend
+from fastapi_sliding_window._types import Algorithm, KeyFunc
 
 
 def default_key_func(request: Request) -> str:
