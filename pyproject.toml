@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastapi-rate-limit"
+version = "0.1.0"
+description = "sliding window rate limiter for FastAPI"
+readme = "README_en.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "drawiks" }]
+keywords = ["fastapi", "rate-limit", "sliding-window", "middleware"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: FastAPI",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "fastapi>=0.100.0",
+    "starlette>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.25",
+    "uvicorn>=0.23",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fastapi_rate_limit*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
