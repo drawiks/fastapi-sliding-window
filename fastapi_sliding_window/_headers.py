@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import math
+from math import ceil
 
 from fastapi_sliding_window._backends.base import RateLimitResult
 
@@ -12,5 +12,5 @@ def rate_limit_headers(result: RateLimitResult) -> dict[str, str]:
         "X-RateLimit-Reset": str(int(result.reset_at)),
     }
     if result.retry_after is not None:
-        headers["Retry-After"] = str(math.ceil(result.retry_after))
+        headers["Retry-After"] = str(ceil(result.retry_after))
     return headers

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import time
+from time import monotonic
 from typing import Any
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -22,6 +22,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         key_func: KeyFunc | None = None,
         include_headers: bool = True,
         exclude_paths: list[str] | None = None,
+        detail: str = "Rate limit exceeded",
     ) -> None:
         super().__init__(app)
         self._requests = requests
@@ -30,20 +31,21 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._key_func = key_func or default_key_func
         self._include_headers = include_headers
         self._exclude_paths = set(exclude_paths or [])
+        self._detail = detail
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if request.url.path in self._exclude_paths:
             return await call_next(request)
 
         key = await resolve_key(request, self._key_func)
-        now = time.monotonic()
+        now = monotonic()
         result = await self._backend.check(key, self._requests, self._window_seconds, now)
 
         if not result.allowed:
             headers = rate_limit_headers(result) if self._include_headers else {}
             return JSONResponse(
                 status_code=429,
-                content={"detail": "Rate limit exceeded"},
+                content={"detail": self._detail},
                 headers=headers,
             )
 
