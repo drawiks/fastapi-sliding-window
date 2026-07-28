@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastapi-sliding-window"
-version = "0.1.0"
+version = "0.2.0"
 description = "sliding window rate limiter for FastAPI"
 readme = "README_en.md"
 license = "MIT"
