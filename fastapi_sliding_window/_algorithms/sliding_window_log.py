@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from asyncio import Lock
 import math
 from collections import defaultdict, deque
 
@@ -9,8 +10,13 @@ from fastapi_sliding_window._backends.base import RateLimitBackend, RateLimitRes
 class SlidingWindowLogBackend(RateLimitBackend):
     def __init__(self) -> None:
         self._data: dict[str, deque[float]] = defaultdict(deque)
+        self._lock = Lock()
 
     async def check(self, key: str, limit: int, window: float, now: float) -> RateLimitResult:
+        async with self._lock:
+            return self._check_locked(key, limit, window, now)
+
+    def _check_locked(self, key: str, limit: int, window: float, now: float) -> RateLimitResult:
         timestamps = self._data[key]
         window_start = now - window
 
@@ -39,4 +45,5 @@ class SlidingWindowLogBackend(RateLimitBackend):
         )
 
     async def reset(self, key: str) -> None:
-        self._data.pop(key, None)
+        async with self._lock:
+            self._data.pop(key, None)

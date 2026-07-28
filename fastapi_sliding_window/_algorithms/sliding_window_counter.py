@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from asyncio import Lock
 import math
 
 from fastapi_sliding_window._backends.base import RateLimitBackend, RateLimitResult
@@ -9,8 +10,13 @@ class SlidingWindowCounterBackend(RateLimitBackend):
     def __init__(self) -> None:
         self._prev: dict[str, tuple[float, int]] = {}
         self._curr: dict[str, tuple[float, int]] = {}
+        self._lock = Lock()
 
     async def check(self, key: str, limit: int, window: float, now: float) -> RateLimitResult:
+        async with self._lock:
+            return self._check_locked(key, limit, window, now)
+
+    def _check_locked(self, key: str, limit: int, window: float, now: float) -> RateLimitResult:
         window_start = self._window_start(now, window)
         reset_at = math.ceil(window_start + window)
 
@@ -42,8 +48,9 @@ class SlidingWindowCounterBackend(RateLimitBackend):
         )
 
     async def reset(self, key: str) -> None:
-        self._prev.pop(key, None)
-        self._curr.pop(key, None)
+        async with self._lock:
+            self._prev.pop(key, None)
+            self._curr.pop(key, None)
 
     @staticmethod
     def _window_start(now: float, window: float) -> float:
@@ -63,5 +70,5 @@ class SlidingWindowCounterBackend(RateLimitBackend):
         if stored_start == window_start:
             self._curr[key] = (window_start, count + 1)
         else:
-            self._prev[key] = self._curr.get(key, (0.0, 0))
+            self._prev[key] = (stored_start, count)
             self._curr[key] = (window_start, 1)

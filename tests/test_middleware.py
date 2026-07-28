@@ -4,7 +4,7 @@ import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
-from fastapi_sliding_window import RateLimitMiddleware
+from fastapi_sliding_window import Algorithm, RateLimitMiddleware
 
 
 @pytest.fixture
@@ -70,5 +70,61 @@ class TestMiddleware:
         response = client.get("/test")
         assert response.status_code == 200
 
+        response = client.get("/test")
+        assert response.status_code == 429
+
+    def test_429_headers_include_all_fields(self, app: FastAPI) -> None:
+        app.add_middleware(RateLimitMiddleware, requests=2, window_seconds=60.0)
+        client = TestClient(app)
+        client.get("/test")
+        client.get("/test")
+        response = client.get("/test")
+        assert response.status_code == 429
+        assert "X-RateLimit-Limit" in response.headers
+        assert "X-RateLimit-Remaining" in response.headers
+        assert "X-RateLimit-Reset" in response.headers
+
+    def test_retry_after_in_429(self, app: FastAPI) -> None:
+        app.add_middleware(RateLimitMiddleware, requests=1, window_seconds=60.0)
+        client = TestClient(app)
+        client.get("/test")
+        response = client.get("/test")
+        assert response.status_code == 429
+        assert "Retry-After" in response.headers
+
+    def test_include_headers_false(self, app: FastAPI) -> None:
+        app.add_middleware(RateLimitMiddleware, requests=1, window_seconds=60.0, include_headers=False)
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+        assert "X-RateLimit-Limit" not in response.headers
+
+    def test_custom_detail(self, app: FastAPI) -> None:
+        app.add_middleware(RateLimitMiddleware, requests=1, window_seconds=60.0, detail="Custom error")
+        client = TestClient(app)
+        client.get("/test")
+        response = client.get("/test")
+        assert response.status_code == 429
+        assert response.json()["detail"] == "Custom error"
+
+    def test_fixed_window_algorithm(self, app: FastAPI) -> None:
+        app.add_middleware(RateLimitMiddleware, requests=2, window_seconds=60.0, algorithm=Algorithm.FIXED_WINDOW)
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+        response = client.get("/test")
+        assert response.status_code == 200
+        response = client.get("/test")
+        assert response.status_code == 429
+
+    def test_sliding_window_counter_algorithm(self, app: FastAPI) -> None:
+        app.add_middleware(
+            RateLimitMiddleware, requests=2, window_seconds=60.0, algorithm=Algorithm.SLIDING_WINDOW_COUNTER
+        )
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+        response = client.get("/test")
+        assert response.status_code == 200
         response = client.get("/test")
         assert response.status_code == 429
