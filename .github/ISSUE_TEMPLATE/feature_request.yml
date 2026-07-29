@@ -1,0 +1,44 @@
+name: Feature Request
+description: Suggest an idea for this project
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest an improvement!
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Motivation
+      description: What problem would this feature solve? What use case does it address?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe how you'd like this to work. Feel free to sketch an API or behavior.
+      placeholder: |
+        Limiter(..., backend=from_url("redis://..."))
+        @app.get("/")
+        @limiter.limit("100/hour")
+        ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any workarounds or alternative designs you've thought about.
+
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Would you be willing to implement this?
+      options:
+        - Yes, I can submit a PR
+        - I'd need help / guidance
+        - No, I'm just suggesting
