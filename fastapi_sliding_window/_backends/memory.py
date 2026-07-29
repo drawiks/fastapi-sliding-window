@@ -10,8 +10,9 @@ class InMemoryBackend(RateLimitBackend):
         self,
         algorithm: Algorithm = Algorithm.SLIDING_WINDOW_LOG,
         burst: int | None = None,
+        max_keys: int = 10000,
     ) -> None:
-        self._backend = make_backend(algorithm, burst=burst)
+        self._backend = make_backend(algorithm, burst=burst, max_keys=max_keys)
 
     async def check(self, key: str, limit: int, window: float, now: float, cost: int = 1) -> RateLimitResult:
         return await self._backend.check(key, limit, window, now, cost=cost)

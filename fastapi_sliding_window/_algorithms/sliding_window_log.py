@@ -4,13 +4,14 @@ import math
 from asyncio import Lock
 from collections import defaultdict, deque
 
-from fastapi_sliding_window._backends.base import RateLimitBackend, RateLimitResult
+from fastapi_sliding_window._backends.base import RateLimitBackend, RateLimitResult, _evict_if_needed
 
 
 class SlidingWindowLogBackend(RateLimitBackend):
-    def __init__(self) -> None:
+    def __init__(self, max_keys: int = 10000) -> None:
         self._data: dict[str, deque[float]] = defaultdict(deque)
         self._lock = Lock()
+        self._max_keys = max_keys
 
     async def check(self, key: str, limit: int, window: float, now: float, cost: int = 1) -> RateLimitResult:
         async with self._lock:
@@ -34,6 +35,7 @@ class SlidingWindowLogBackend(RateLimitBackend):
         reset_at = math.ceil(now + window)
 
         if len(timestamps) + cost <= limit:
+            _evict_if_needed(self._data, self._max_keys, key)
             for _ in range(cost):
                 timestamps.append(now)
             return RateLimitResult(

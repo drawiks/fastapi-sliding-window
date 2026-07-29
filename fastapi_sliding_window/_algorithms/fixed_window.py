@@ -3,13 +3,14 @@ from __future__ import annotations
 import math
 from asyncio import Lock
 
-from fastapi_sliding_window._backends.base import RateLimitBackend, RateLimitResult
+from fastapi_sliding_window._backends.base import RateLimitBackend, RateLimitResult, _evict_if_needed
 
 
 class FixedWindowBackend(RateLimitBackend):
-    def __init__(self) -> None:
+    def __init__(self, max_keys: int = 10000) -> None:
         self._data: dict[str, tuple[float, int]] = {}
         self._lock = Lock()
+        self._max_keys = max_keys
 
     async def check(self, key: str, limit: int, window: float, now: float, cost: int = 1) -> RateLimitResult:
         async with self._lock:
@@ -30,6 +31,7 @@ class FixedWindowBackend(RateLimitBackend):
         stored_start, count = self._data.get(key, (0.0, 0))
 
         if stored_start != window_start:
+            _evict_if_needed(self._data, self._max_keys, key)
             self._data[key] = (window_start, cost)
             new_count = cost
             return RateLimitResult(
@@ -40,6 +42,7 @@ class FixedWindowBackend(RateLimitBackend):
             )
 
         if count + cost <= limit:
+            _evict_if_needed(self._data, self._max_keys, key)
             self._data[key] = (window_start, count + cost)
             return RateLimitResult(
                 allowed=True,
