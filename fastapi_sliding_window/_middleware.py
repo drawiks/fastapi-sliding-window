@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from collections.abc import Callable, MutableMapping
 from time import monotonic
 from typing import TYPE_CHECKING, Any
@@ -35,6 +36,7 @@ class RateLimitMiddleware:
         cost: int | Callable[[Request], int] = 1,
         limiter: Limiter | None = None,
         use_ietf_headers: bool = False,
+        exempt_when: Callable[[Request], bool] | None = None,
     ) -> None:
         self.app = app
         self._limiter = limiter
@@ -45,12 +47,18 @@ class RateLimitMiddleware:
         self._detail = detail
         self._cost = cost
         self._backend = backend
+        self._exempt_when = exempt_when
 
         if limiter is not None:
-            limiter._include_headers = include_headers
-            limiter._use_ietf = use_ietf_headers
             self._requests: int | None = None
             self._window_seconds = 0.0
+            if not limiter._default_limits:
+                warnings.warn(
+                    "RateLimitMiddleware with limiter but no default_limits: "
+                    "endpoint @limiter.limit() decorators won't apply. "
+                    "Use Depends(RateLimit(limiter=limiter)) for per-endpoint limits.",
+                    stacklevel=2,
+                )
             return
 
         self._algorithm = algorithm
@@ -81,6 +89,10 @@ class RateLimitMiddleware:
 
         request = Request(scope)
 
+        if self._exempt_when is not None and self._exempt_when(request):
+            await self.app(scope, receive, send)
+            return
+
         if self._limiter is not None:
             await self._handle_limiter_mode(scope, receive, send, request)
             return
@@ -97,7 +109,13 @@ class RateLimitMiddleware:
         assert self._limiter is not None
         resp = Response()
         try:
-            await self._limiter.check_rules(request, resp, [])
+            await self._limiter.check_rules(
+                request,
+                resp,
+                [],
+                include_headers=self._include_headers,
+                use_ietf=self._use_ietf,
+            )
         except RateLimitExceeded as e:
             await self._send_429(send, self._detail, dict(e.headers) if e.headers else None)
             return
@@ -126,9 +144,8 @@ class RateLimitMiddleware:
         resolved_cost = self._cost(request) if callable(self._cost) else self._cost
         assert self._requests is not None
 
-        result = await (self._backend or make_backend(self._algorithm)).check(
-            key, self._requests, self._window_seconds, now, cost=resolved_cost
-        )
+        assert self._backend is not None
+        result = await self._backend.check(key, self._requests, self._window_seconds, now, cost=resolved_cost)
 
         if not result.allowed:
             headers = rate_limit_headers(result, self._use_ietf) if self._include_headers else {}
