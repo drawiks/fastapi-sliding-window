@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import warnings
 from collections.abc import Callable, MutableMapping
-from time import monotonic
+from time import time
 from typing import TYPE_CHECKING, Any
 
 from starlette.requests import Request
@@ -13,9 +13,13 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from fastapi_sliding_window._backends.base import RateLimitBackend
 from fastapi_sliding_window._exceptions import RateLimitExceeded
 from fastapi_sliding_window._headers import rate_limit_headers
-from fastapi_sliding_window._limits import parse
 from fastapi_sliding_window._types import Algorithm, KeyFunc
-from fastapi_sliding_window._utils import default_key_func, make_backend, resolve_key
+from fastapi_sliding_window._utils import (
+    _parse_requests,
+    default_key_func,
+    make_backend,
+    resolve_key,
+)
 
 if TYPE_CHECKING:
     from fastapi_sliding_window._limiter import Limiter
@@ -62,15 +66,12 @@ class RateLimitMiddleware:
             return
 
         self._algorithm = algorithm
-        if isinstance(requests, str):
-            item = parse(requests)
-            self._requests = item.limit
-            self._window_seconds = item.window
-            self._burst = item.burst
-        else:
-            self._requests = requests
-            self._window_seconds = window_seconds
-            self._burst = None
+        parsed = _parse_requests(requests, window_seconds)
+        self._requests = parsed[0]
+        self._window_seconds = parsed[1]
+        self._burst = parsed[2]
+        if isinstance(requests, int) and self._requests <= 0:
+            raise ValueError(f"requests must be positive, got {self._requests}")
         self._key_func = key_func or default_key_func
         if backend is not None:
             self._backend = backend
@@ -106,7 +107,8 @@ class RateLimitMiddleware:
         send: Send,
         request: Request,
     ) -> None:
-        assert self._limiter is not None
+        if self._limiter is None:
+            raise RuntimeError("RateLimitMiddleware used in limiter mode without a limiter")
         resp = Response()
         try:
             await self._limiter.check_rules(
@@ -140,11 +142,14 @@ class RateLimitMiddleware:
         request: Request,
     ) -> None:
         key = await resolve_key(request, self._key_func or default_key_func)
-        now = monotonic()
+        now = time()
         resolved_cost = self._cost(request) if callable(self._cost) else self._cost
-        assert self._requests is not None
-
-        assert self._backend is not None
+        if isinstance(resolved_cost, int) and resolved_cost < 1:
+            raise ValueError(f"cost must be >= 1, got {resolved_cost}")
+        if self._requests is None:
+            raise RuntimeError("RateLimitMiddleware used without requests configured")
+        if self._backend is None:
+            raise RuntimeError("RateLimitMiddleware has no backend configured")
         result = await self._backend.check(key, self._requests, self._window_seconds, now, cost=resolved_cost)
 
         if not result.allowed:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from time import monotonic
+from time import time
 from typing import Literal
 
 from fastapi_sliding_window._backends.base import RateLimitBackend, RateLimitResult
@@ -50,7 +50,7 @@ class RedisWithFallbackBackend(RateLimitBackend):
 
     async def _check_locked(self, key: str, limit: int, window: float, now: float, cost: int) -> RateLimitResult:
         if self._circuit.state == "open":
-            if monotonic() - self._circuit.last_open >= self._recovery:
+            if time() - self._circuit.last_open >= self._recovery:
                 self._circuit.state = "half-open"
                 self._circuit.failures = 0
             else:
@@ -71,7 +71,7 @@ class RedisWithFallbackBackend(RateLimitBackend):
             self._circuit.failures += 1
             if self._circuit.failures >= self._threshold:
                 self._circuit.state = "open"
-                self._circuit.last_open = monotonic()
+                self._circuit.last_open = time()
             return await self._fallback.check(key, limit, window, now, cost=cost)
 
     async def reset(self, key: str) -> None:

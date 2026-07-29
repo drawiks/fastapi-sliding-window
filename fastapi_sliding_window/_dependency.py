@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from time import monotonic
+from time import time
 from typing import TYPE_CHECKING
 
 from starlette.requests import Request
@@ -10,9 +10,13 @@ from starlette.responses import Response
 from fastapi_sliding_window._backends.base import RateLimitBackend
 from fastapi_sliding_window._exceptions import RateLimitExceeded
 from fastapi_sliding_window._headers import rate_limit_headers
-from fastapi_sliding_window._limits import parse
 from fastapi_sliding_window._types import Algorithm, KeyFunc
-from fastapi_sliding_window._utils import default_key_func, make_backend, resolve_key
+from fastapi_sliding_window._utils import (
+    _parse_requests,
+    default_key_func,
+    make_backend,
+    resolve_key,
+)
 
 if TYPE_CHECKING:
     from fastapi_sliding_window._limiter import Limiter
@@ -31,6 +35,7 @@ class RateLimit:
         cost: int | Callable[[Request], int] = 1,
         limiter: Limiter | None = None,
         use_ietf_headers: bool = False,
+        exempt_when: Callable[[Request], bool] | None = None,
     ) -> None:
         self._limiter = limiter
         self._include_headers = include_headers
@@ -38,6 +43,7 @@ class RateLimit:
         self._backend = backend
         self._detail = detail
         self._cost = cost
+        self._exempt_when = exempt_when
 
         if limiter is not None:
             self._requests: int | None = None
@@ -45,15 +51,12 @@ class RateLimit:
             return
 
         self._algorithm = algorithm
-        if isinstance(requests, str):
-            item = parse(requests)
-            self._requests = item.limit
-            self._window_seconds = item.window
-            self._burst = item.burst
-        else:
-            self._requests = requests
-            self._window_seconds = window_seconds
-            self._burst = None
+        parsed = _parse_requests(requests, window_seconds)
+        self._requests = parsed[0]
+        self._window_seconds = parsed[1]
+        self._burst = parsed[2]
+        if isinstance(requests, int) and self._requests <= 0:
+            raise ValueError(f"requests must be positive, got {self._requests}")
         self._key_func = key_func or default_key_func
         if backend is not None:
             self._backend = backend
@@ -61,6 +64,8 @@ class RateLimit:
             self._backend = make_backend(algorithm, burst=self._burst)
 
     async def __call__(self, request: Request, response: Response) -> None:
+        if self._exempt_when is not None and self._exempt_when(request):
+            return
         if self._limiter is not None:
             endpoint = request.scope.get("endpoint")
             rules = getattr(endpoint, "__rate_limit_rules__", []) if endpoint else []
@@ -74,10 +79,14 @@ class RateLimit:
             return
 
         key = await resolve_key(request, self._key_func)
-        now = monotonic()
+        now = time()
         resolved_cost = self._cost(request) if callable(self._cost) else self._cost
-        assert self._requests is not None
-        assert self._backend is not None
+        if isinstance(resolved_cost, int) and resolved_cost < 1:
+            raise ValueError(f"cost must be >= 1, got {resolved_cost}")
+        if self._requests is None:
+            raise RuntimeError("RateLimit used in limiter mode without a limiter")
+        if self._backend is None:
+            raise RuntimeError("RateLimit has no backend configured")
         result = await self._backend.check(key, self._requests, self._window_seconds, now, cost=resolved_cost)
 
         if not result.allowed:

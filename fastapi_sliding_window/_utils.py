@@ -14,7 +14,18 @@ from fastapi_sliding_window._algorithms.sliding_window_log import (
 )
 from fastapi_sliding_window._algorithms.token_bucket import TokenBucketBackend
 from fastapi_sliding_window._backends.base import RateLimitBackend
+from fastapi_sliding_window._limits import parse
 from fastapi_sliding_window._types import Algorithm, KeyFunc
+
+
+def _parse_requests(
+    requests: int | str,
+    window_seconds: float,
+) -> tuple[int, float, int | None]:
+    if isinstance(requests, str):
+        item = parse(requests)
+        return item.limit, item.window, item.burst
+    return requests, window_seconds, None
 
 
 def default_key_func(request: Request) -> str:

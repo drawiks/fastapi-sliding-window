@@ -51,6 +51,10 @@ class RateLimitItem:
     def __post_init__(self) -> None:
         if self.window <= 0:
             raise ValueError(f"window must be positive, got {self.window}")
+        if self.limit <= 0:
+            raise ValueError(f"limit must be positive, got {self.limit}")
+        if self.burst is not None and self.burst < 0:
+            raise ValueError(f"burst must be non-negative, got {self.burst}")
 
 
 def parse(s: str) -> RateLimitItem:
@@ -62,7 +66,9 @@ def parse(s: str) -> RateLimitItem:
     window = UNITS.get(unit_str)
     if window is None:
         raise ValueError(f"Unknown unit: {unit_str!r}")
-    burst = int(m.group(4)) if m.group(4) else None
+    burst: int | None = int(m.group(4)) if m.group(4) else None
+    if burst == 0:
+        burst = None
     return RateLimitItem(limit, window, unit_str, burst)
 
 

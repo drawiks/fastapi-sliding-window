@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from time import monotonic
+from time import time
 from typing import TYPE_CHECKING, Any
 
 from starlette.requests import Request
@@ -50,6 +50,7 @@ class Limiter:
             endpoint.__rate_limit_rules__ = updated  # type: ignore[attr-defined]
             flat = [item for rule in updated for item in rule[0]]
             endpoint.__rate_limit_items__ = flat  # type: ignore[attr-defined]
+
             return endpoint
 
         return decorator
@@ -143,7 +144,7 @@ class Limiter:
         include_headers: bool | None = None,
         use_ietf: bool | None = None,
     ) -> RateLimitResult | None:
-        now = monotonic()
+        now = time()
         resolved_cost = cost(request) if callable(cost) else cost
         effective_include = include_headers if include_headers is not None else self._include_headers
         effective_ietf = use_ietf if use_ietf is not None else self._use_ietf

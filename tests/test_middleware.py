@@ -167,6 +167,53 @@ class TestMiddleware:
         response = client.get("/test")
         assert response.status_code == 429
 
+    def test_exempt_when_skips_rate_limit(self, app: FastAPI) -> None:
+        app.add_middleware(
+            RateLimitMiddleware,
+            requests=1,
+            window_seconds=60.0,
+            exempt_when=lambda r: r.headers.get("X-Skip") == "yes",
+        )
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+        response = client.get("/test")
+        assert response.status_code == 429
+        response = client.get("/test", headers={"X-Skip": "yes"})
+        assert response.status_code == 200
+
+    def test_exempt_when_allows_within_limit(self, app: FastAPI) -> None:
+        app.add_middleware(
+            RateLimitMiddleware,
+            requests=3,
+            window_seconds=60.0,
+            exempt_when=lambda r: r.headers.get("X-Skip") == "yes",
+        )
+        client = TestClient(app)
+        for _ in range(4):
+            response = client.get("/test", headers={"X-Skip": "yes"})
+            assert response.status_code == 200
+
+    def test_exempt_when_limiter_mode(self) -> None:
+        backend = InMemoryBackend()
+        limiter = Limiter(backend=backend, default_limits=["1/sec"])
+        app = FastAPI()
+
+        @app.get("/test")
+        async def endpoint() -> dict:
+            return {"ok": True}
+
+        app.add_middleware(
+            RateLimitMiddleware,
+            limiter=limiter,
+            exempt_when=lambda r: r.headers.get("X-Skip") == "yes",
+        )
+        client = TestClient(app)
+        response = client.get("/test", headers={"X-Skip": "yes"})
+        assert response.status_code == 200
+        response = client.get("/test", headers={"X-Skip": "yes"})
+        assert response.status_code == 200
+
 
 class TestMiddlewareLimiterDelegation:
     def test_middleware_with_limiter_allows(self) -> None:
