@@ -41,7 +41,10 @@
 ```bash
 pip install fastapi-sliding-window
 pip install fastapi-sliding-window[redis]  # with Redis support
+pip install "fastapi-sliding-window[redis]" uvicorn  # to run examples/
 ```
+
+> Full working examples are in the [`examples/`](examples/) directory.
 
 ---
 
@@ -84,6 +87,31 @@ async def login():
 - 🚧 **circuit breaker** — `RedisWithFallbackBackend` falls back to in-memory on Redis failure
 - ✅ **fully typed** — `py.typed` marker included
 - 🚀 **async-native** — thread-safe with `asyncio.Lock`
+
+---
+
+## **⚖️ comparison with alternatives**
+
+| Feature | fastapi-sliding-window | slowapi | fastapi-limiter |
+|---------|:---------------------:|:-------:|:---------------:|
+| Algorithms | **5** (Fixed, Sliding Log, Sliding Counter, Token Bucket, GCRA) | 2 (Fixed + Sliding) | 1 (Fixed) |
+| In-memory backend | ✅ **zero deps** | ✅ (via `limits` lib) | ❌ Redis only |
+| Redis backend | ✅ | ✅ | ✅ |
+| Circuit Breaker | ✅ | ❌ | ❌ |
+| Middleware | ✅ | ✅ | ❌ |
+| Dependency | ✅ | ✅ | ✅ |
+| Decorator API | ✅ | ✅ | ❌ |
+| IETF Headers (`RateLimit-*`) | ✅ | ❌ | ❌ |
+| Cost per request | ✅ | ❌ | ❌ |
+| Burst support | ✅ | ❌ | ❌ |
+| Thread-safe | ✅ | ❌ | ❌ |
+| WebSocket | ❌ | ❌ | ✅ |
+| memcached | ❌ | ✅ | ❌ |
+| mypy strict | ✅ | ❌ | ❌ |
+| Python versions | 3.10+ | 3.7+ | 3.9+ |
+| External deps (basic mode) | **zero** | `flask-limiter` + `limits` | `pyrate-limiter` |
+
+Each library has its own strengths — choose what fits your use case.
 
 ---
 
