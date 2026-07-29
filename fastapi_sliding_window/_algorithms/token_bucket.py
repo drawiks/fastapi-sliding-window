@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-import math
 from asyncio import Lock
-from collections import defaultdict, deque
+from math import ceil, floor
+from typing import final
 
 from fastapi_sliding_window._backends.base import RateLimitBackend, RateLimitResult
 
 
-class SlidingWindowLogBackend(RateLimitBackend):
-    def __init__(self) -> None:
-        self._data: dict[str, deque[float]] = defaultdict(deque)
+@final
+class TokenBucketBackend(RateLimitBackend):
+    def __init__(self, burst: int | None = None) -> None:
         self._lock = Lock()
+        self._data: dict[str, tuple[float, float]] = {}
+        self._default_burst = burst
 
     async def check(self, key: str, limit: int, window: float, now: float, cost: int = 1) -> RateLimitResult:
         async with self._lock:
@@ -22,29 +24,30 @@ class SlidingWindowLogBackend(RateLimitBackend):
                 allowed=False,
                 remaining=0,
                 limit=limit,
-                reset_at=math.ceil(now + window),
+                reset_at=ceil(now + window),
                 retry_after=window,
             )
-        timestamps = self._data[key]
-        window_start = now - window
+        capacity = float(self._default_burst or limit)
+        rate = limit / window if window > 0 else float("inf")
+        reset_at = ceil(now + window)
 
-        while timestamps and timestamps[0] <= window_start:
-            timestamps.popleft()
+        stored = self._data.get(key)
+        if stored is None:
+            tokens = capacity
+        else:
+            tokens, last_refill = stored
+            tokens = min(capacity, tokens + (now - last_refill) * rate)
 
-        reset_at = math.ceil(now + window)
-
-        if len(timestamps) + cost <= limit:
-            for _ in range(cost):
-                timestamps.append(now)
+        if tokens >= cost:
+            self._data[key] = (tokens - cost, now)
             return RateLimitResult(
                 allowed=True,
-                remaining=limit - len(timestamps),
+                remaining=floor(tokens - cost),
                 limit=limit,
                 reset_at=reset_at,
             )
 
-        oldest = timestamps[0]
-        retry_after = oldest + window - now
+        retry_after = (cost - tokens) / rate
         return RateLimitResult(
             allowed=False,
             remaining=0,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from asyncio import Lock
 import math
+from asyncio import Lock
 
 from fastapi_sliding_window._backends.base import RateLimitBackend, RateLimitResult
 
@@ -12,11 +12,19 @@ class SlidingWindowCounterBackend(RateLimitBackend):
         self._curr: dict[str, tuple[float, int]] = {}
         self._lock = Lock()
 
-    async def check(self, key: str, limit: int, window: float, now: float) -> RateLimitResult:
+    async def check(self, key: str, limit: int, window: float, now: float, cost: int = 1) -> RateLimitResult:
         async with self._lock:
-            return self._check_locked(key, limit, window, now)
+            return self._check_locked(key, limit, window, now, cost)
 
-    def _check_locked(self, key: str, limit: int, window: float, now: float) -> RateLimitResult:
+    def _check_locked(self, key: str, limit: int, window: float, now: float, cost: int) -> RateLimitResult:
+        if limit <= 0:
+            return RateLimitResult(
+                allowed=False,
+                remaining=0,
+                limit=limit,
+                reset_at=math.ceil(now + window),
+                retry_after=window,
+            )
         window_start = self._window_start(now, window)
         reset_at = math.ceil(window_start + window)
 
@@ -27,9 +35,9 @@ class SlidingWindowCounterBackend(RateLimitBackend):
         overlap_ratio = (window_start + window - now) / window
         weighted = prev_count * overlap_ratio + curr_count
 
-        if weighted < limit:
-            self._increment(key, window_start)
-            new_weighted = prev_count * overlap_ratio + curr_count + 1
+        if weighted + cost <= limit:
+            self._increment(key, window_start, cost)
+            new_weighted = weighted + cost
             remaining = max(0, math.floor(limit - new_weighted))
             return RateLimitResult(
                 allowed=True,
@@ -65,10 +73,10 @@ class SlidingWindowCounterBackend(RateLimitBackend):
             return count_prev
         return 0
 
-    def _increment(self, key: str, window_start: float) -> None:
+    def _increment(self, key: str, window_start: float, cost: int = 1) -> None:
         stored_start, count = self._curr.get(key, (0.0, 0))
         if stored_start == window_start:
-            self._curr[key] = (window_start, count + 1)
+            self._curr[key] = (window_start, count + cost)
         else:
             self._prev[key] = (stored_start, count)
-            self._curr[key] = (window_start, 1)
+            self._curr[key] = (window_start, cost)
