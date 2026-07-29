@@ -31,7 +31,12 @@ async def backend(mock_redis):
 async def _run(backend, algo, key, limit, window, now, cost=1, **kwargs):
     backend._algorithm = algo
     script = backend._scripts[algo]
-    script.return_value = (kwargs.get("allowed", 1), kwargs.get("remaining", limit - 1), kwargs.get("reset_at", now + window), kwargs.get("retry_after", -1))
+    script.return_value = (
+        kwargs.get("allowed", 1),
+        kwargs.get("remaining", limit - 1),
+        kwargs.get("reset_at", now + window),
+        kwargs.get("retry_after", -1),
+    )
     return await backend.check(key, limit, window, now, cost=cost)
 
 
@@ -90,7 +95,10 @@ async def test_all_algorithms_execute_lua(mock_redis):
         fake_redis = AsyncMock()
         fake_redis.register_script = MagicMock(return_value=AsyncMock(return_value=(1, 9, 110.0, -1)))
         b._redis = fake_redis
-        b._scripts = {name: fake_redis.register_script() for name in ["fixed_window", "sliding_window_log", "sliding_window_counter", "gcra"]}
+        b._scripts = {
+            name: fake_redis.register_script()
+            for name in ["fixed_window", "sliding_window_log", "sliding_window_counter", "gcra"]
+        }
         result = await b.check("k", 10, 10.0, 100.0, cost=1)
         assert result.allowed is True
         assert result.remaining == 9
