@@ -158,17 +158,16 @@ class RedisBackend(RateLimitBackend):
         await self._ensure_redis()
         script = self._scripts[self._algorithm]
         burst = self._burst or limit
-        member = f"{now}:{uuid4().hex}"
         if self._algorithm == "fixed_window":
             args = [str(limit), str(window), str(now), str(cost)]
         elif self._algorithm == "sliding_window_log":
-            args = [str(limit), str(window), str(now), str(cost), member]
+            args = [str(limit), str(window), str(now), str(cost), f"{now}:{uuid4().hex}"]
         elif self._algorithm == "sliding_window_counter":
             args = [str(limit), str(window), str(now), str(cost)]
         elif self._algorithm == "gcra":
             args = [str(limit), str(window), str(now), str(burst), str(cost)]
         else:
-            args = [str(limit), str(window), str(now), str(burst), str(cost), member]
+            args = [str(limit), str(window), str(now), str(burst), str(cost), f"{now}:{uuid4().hex}"]
         keys = [f"{self._prefix}{{{key}}}"]
         allowed_raw, remaining_raw, reset_at_raw, retry_after_raw = await script(keys=keys, args=args)
         retry_after: float | None = None
