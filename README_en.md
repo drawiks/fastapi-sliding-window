@@ -15,7 +15,7 @@
     <a href="https://github.com/drawiks/fastapi-sliding-window">
         <img alt="Ruff" src="https://img.shields.io/badge/code%20style-ruff-000000">
     </a>
-    <p><strong>fastapi-sliding-window</strong> — sliding window rate limiter for FastAPI</p>
+    <p><strong>fastapi-sliding-window</strong> - sliding window rate limiter for FastAPI</p>
     <blockquote>(─‿‿─)</blockquote>
 </div>
 
@@ -80,13 +80,13 @@ async def login():
 
 ## **🧩 features**
 
-- 🎯 **5 algorithms** — Sliding Window Log, Sliding Window Counter, Fixed Window, Token Bucket, GCRA
-- 💾 **in-memory & Redis** — no external deps for single-node, Redis for distributed
-- 🔧 **three usage styles** — `@limiter.limit()` decorator, `Depends(RateLimit(...))`, `RateLimitMiddleware`
-- 📝 **standard & IETF headers** — `X-RateLimit-*` or `RateLimit-*` — configurable
-- 🚧 **circuit breaker** — `RedisWithFallbackBackend` falls back to in-memory on Redis failure
-- ✅ **fully typed** — `py.typed` marker included
-- 🚀 **async-native** — thread-safe with `asyncio.Lock`
+- 🎯 **5 algorithms** - Sliding Window Log, Sliding Window Counter, Fixed Window, Token Bucket, GCRA
+- 💾 **in-memory & Redis** - no external deps for single-node, Redis for distributed
+- 🔧 **three usage styles** - `@limiter.limit()` decorator, `Depends(RateLimit(...))`, `RateLimitMiddleware`
+- 📝 **standard & IETF headers** - `X-RateLimit-*` or `RateLimit-*` - configurable
+- 🚧 **circuit breaker** - `RedisWithFallbackBackend` falls back to in-memory on Redis failure
+- ✅ **fully typed** - `py.typed` marker included
+- 🚀 **async-native** - thread-safe with `asyncio.Lock`
 
 ---
 
@@ -111,7 +111,7 @@ async def login():
 | Python versions | 3.10+ | 3.7+ | 3.9+ |
 | External deps (basic mode) | **zero** | `flask-limiter` + `limits` | `pyrate-limiter` |
 
-Each library has its own strengths — choose what fits your use case.
+Each library has its own strengths - choose what fits your use case.
 
 ---
 
@@ -260,6 +260,33 @@ parse_many("100/hour;10/minute")  # list[RateLimitItem, RateLimitItem]
 
 ---
 
+## **⚠️ behind a reverse proxy**
+
+The default `key_func` uses `request.client.host`, which behind nginx or Cloudflare returns the proxy's IP, not the client's IP. Every user behind the same proxy lands in the same rate-limit bucket.
+
+Provide a custom `key_func` that reads `X-Forwarded-For` or `X-Real-IP`:
+
+```python
+from fastapi import Request
+
+TRUSTED_PROXIES = {"127.0.0.1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}
+
+def client_ip(request: Request) -> str:
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded and request.client.host in TRUSTED_PROXIES:
+        return forwarded.split(",")[0].strip()
+    if real_ip := request.headers.get("X-Real-IP"):
+        if request.client.host in TRUSTED_PROXIES:
+            return real_ip
+    return request.client.host or "unknown"
+
+limiter = Limiter(backend=InMemoryBackend(), key_func=client_ip)
+```
+
+**Security note:** Never trust `X-Forwarded-For` unconditionally - it can be spoofed. Validate that the request came from your proxy before trusting forwarded headers. The `TRUSTED_PROXIES` set should only contain IPs you control.
+
+---
+
 ## **📊 algorithms**
 
 | Algorithm | Accuracy | Memory | Speed | Best for |
@@ -304,7 +331,7 @@ Tracks the next allowed timestamp (TAT). Supports smooth traffic shaping with bu
 | Token Bucket | 189,100 | 5.3 |
 | GCRA | 207,300 | 4.8 |
 
-All algorithms complete a check in **5–7 µs** — the overhead is negligible for any real application.
+All algorithms complete a check in **5–7 µs** - the overhead is negligible for any real application.
 
 ### Full-stack throughput (50 concurrent clients)
 
@@ -312,7 +339,7 @@ Through `RateLimitMiddleware` (pure ASGI, no serialization) + FastAPI.
 
 | Algorithm | RPS | vs baseline |
 |-----------|----:|:-----------:|
-| Baseline (no limit) | 72,850 | — |
+| Baseline (no limit) | 72,850 | - |
 | Fixed Window | 67,660 | 93% |
 | Sliding Window Log | 67,320 | 92% |
 | Sliding Window Counter | 67,040 | 92% |
@@ -361,7 +388,7 @@ Overhead of the rate-limit middleware is **~7–8%** at scale.
 
 ### `Limiter(backend, key_func, default_limits, on_breach, include_headers, use_ietf_headers)`
 
-Main class — decorator API.
+Main class - decorator API.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -373,9 +400,9 @@ Main class — decorator API.
 | `use_ietf_headers` | `bool` | `False` | use `RateLimit-*` instead of `X-RateLimit-*` |
 
 Methods:
-- `@limiter.limit("100/hour", cost=1, key_func=None, exempt_when=None)` — decorator
-- `@limiter.exempt` — skip rate limiting
-- `await limiter.check(request, response, items)` — programmatic check
+- `@limiter.limit("100/hour", cost=1, key_func=None, exempt_when=None)` - decorator
+- `@limiter.exempt` - skip rate limiting
+- `await limiter.check(request, response, items)` - programmatic check
 
 ### `RateLimit(requests, window_seconds, algorithm, key_func, include_headers, detail, backend, cost, limiter, use_ietf_headers)`
 
