@@ -292,6 +292,49 @@ Tracks the next allowed timestamp (TAT). Supports smooth traffic shaping with bu
 
 ---
 
+## **📊 benchmark results**
+
+### Pure backend speed (100k direct calls)
+
+| Algorithm | checks/s | avg µs |
+|-----------|---------:|-------:|
+| Fixed Window | 200,700 | 5.0 |
+| Sliding Window Log | 199,000 | 5.0 |
+| Sliding Window Counter | 142,800 | 7.0 |
+| Token Bucket | 189,100 | 5.3 |
+| GCRA | 207,300 | 4.8 |
+
+All algorithms complete a check in **5–7 µs** — the overhead is negligible for any real application.
+
+### Full-stack throughput (50 concurrent clients)
+
+Through `RateLimitMiddleware` (pure ASGI, no serialization) + FastAPI.
+
+| Algorithm | RPS | vs baseline |
+|-----------|----:|:-----------:|
+| Baseline (no limit) | 72,850 | — |
+| Fixed Window | 67,660 | 93% |
+| Sliding Window Log | 67,320 | 92% |
+| Sliding Window Counter | 67,040 | 92% |
+| Token Bucket | 67,320 | 92% |
+| GCRA | 67,370 | 92% |
+
+Overhead of the rate-limit middleware is **~7–8%** at scale.
+
+### Accuracy (limit 10/s, 50 requests at 10ms intervals)
+
+| Algorithm | Allowed | Blocked | Notes |
+|-----------|--------:|--------:|-------|
+| Fixed Window | 10 | 40 | |
+| Sliding Window Log | 10 | 40 | |
+| Sliding Window Counter | 10 | 40 | |
+| Token Bucket | 15 | 35 | 5 extra allowed (burst by design) |
+| GCRA | 15 | 35 | 5 extra allowed (burst by design) |
+
+> Full benchmark script and methodology: [`benchmarks/`](benchmarks/).
+
+---
+
 ## **📝 HTTP headers**
 
 ### Standard (default)
