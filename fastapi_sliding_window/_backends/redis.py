@@ -8,7 +8,7 @@ from fastapi_sliding_window._backends.base import RateLimitBackend, RateLimitRes
 try:
     from redis.asyncio import Redis as _Redis
 except ImportError:
-    _Redis = None  # type: ignore[assignment, misc]
+    _Redis = None
 
 LUA_SCRIPTS: dict[str, str] = {
     "fixed_window": """

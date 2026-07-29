@@ -14,8 +14,8 @@ try:
     from redis.exceptions import ConnectionError as RedisConnectionError
     from redis.exceptions import TimeoutError as RedisTimeoutError
 except ImportError:
-    RedisConnectionError = ConnectionError  # type: ignore[assignment, misc]
-    RedisTimeoutError = TimeoutError  # type: ignore[assignment, misc]
+    RedisConnectionError = ConnectionError
+    RedisTimeoutError = TimeoutError
 
 
 @dataclass
