@@ -133,7 +133,7 @@ async def bench_throughput():
 
 async def bench_accuracy():
     print("=" * 90)
-    print("Accuracy test — limit 10/s, fire 50 requests (100ms apart)")
+    print("Accuracy test — limit 10/s, fire 50 requests (10ms apart)")
     print("=" * 90)
     print(f"{'Algorithm':<25} {'allowed':>8} {'blocked':>8} {'1st Retry-After':>16}")
     print("-" * 90)
