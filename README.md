@@ -41,7 +41,10 @@
 ```bash
 pip install fastapi-sliding-window
 pip install fastapi-sliding-window[redis]  # with Redis support
+pip install "fastapi-sliding-window[redis]" uvicorn  # to run examples/
 ```
+
+> Full working examples are in the [`examples/`](examples/) directory.
 
 ---
 
@@ -84,6 +87,31 @@ async def login():
 - 🚧 **circuit breaker** — `RedisWithFallbackBackend` falls back to in-memory on Redis failure
 - ✅ **fully typed** — `py.typed` marker included
 - 🚀 **async-native** — thread-safe with `asyncio.Lock`
+
+---
+
+## **⚖️ comparison with alternatives**
+
+| Feature | fastapi-sliding-window | slowapi | fastapi-limiter |
+|---------|:---------------------:|:-------:|:---------------:|
+| Algorithms | **5** (Fixed, Sliding Log, Sliding Counter, Token Bucket, GCRA) | 2 (Fixed + Sliding) | 1 (Fixed) |
+| In-memory backend | ✅ **zero deps** | ✅ (via `limits` lib) | ❌ Redis only |
+| Redis backend | ✅ | ✅ | ✅ |
+| Circuit Breaker | ✅ | ❌ | ❌ |
+| Middleware | ✅ | ✅ | ❌ |
+| Dependency | ✅ | ✅ | ✅ |
+| Decorator API | ✅ | ✅ | ❌ |
+| IETF Headers (`RateLimit-*`) | ✅ | ❌ | ❌ |
+| Cost per request | ✅ | ❌ | ❌ |
+| Burst support | ✅ | ❌ | ❌ |
+| Thread-safe | ✅ | ❌ | ❌ |
+| WebSocket | ❌ | ❌ | ✅ |
+| memcached | ❌ | ✅ | ❌ |
+| mypy strict | ✅ | ❌ | ❌ |
+| Python versions | 3.10+ | 3.7+ | 3.9+ |
+| External deps (basic mode) | **zero** | `flask-limiter` + `limits` | `pyrate-limiter` |
+
+Each library has its own strengths — choose what fits your use case.
 
 ---
 
@@ -261,6 +289,49 @@ Maintains a token count that refills at a fixed rate. Allows bursting up to the 
 ### GCRA (Generic Cell Rate Algorithm)
 
 Tracks the next allowed timestamp (TAT). Supports smooth traffic shaping with burst tolerance. O(1) memory per key.
+
+---
+
+## **📊 benchmark results**
+
+### Pure backend speed (100k direct calls)
+
+| Algorithm | checks/s | avg µs |
+|-----------|---------:|-------:|
+| Fixed Window | 200,700 | 5.0 |
+| Sliding Window Log | 199,000 | 5.0 |
+| Sliding Window Counter | 142,800 | 7.0 |
+| Token Bucket | 189,100 | 5.3 |
+| GCRA | 207,300 | 4.8 |
+
+All algorithms complete a check in **5–7 µs** — the overhead is negligible for any real application.
+
+### Full-stack throughput (50 concurrent clients)
+
+Through `RateLimitMiddleware` (pure ASGI, no serialization) + FastAPI.
+
+| Algorithm | RPS | vs baseline |
+|-----------|----:|:-----------:|
+| Baseline (no limit) | 72,850 | — |
+| Fixed Window | 67,660 | 93% |
+| Sliding Window Log | 67,320 | 92% |
+| Sliding Window Counter | 67,040 | 92% |
+| Token Bucket | 67,320 | 92% |
+| GCRA | 67,370 | 92% |
+
+Overhead of the rate-limit middleware is **~7–8%** at scale.
+
+### Accuracy (limit 10/s, 50 requests at 10ms intervals)
+
+| Algorithm | Allowed | Blocked | Notes |
+|-----------|--------:|--------:|-------|
+| Fixed Window | 10 | 40 | |
+| Sliding Window Log | 10 | 40 | |
+| Sliding Window Counter | 10 | 40 | |
+| Token Bucket | 15 | 35 | 5 extra allowed (burst by design) |
+| GCRA | 15 | 35 | 5 extra allowed (burst by design) |
+
+> Full benchmark script and methodology: [`benchmarks/`](benchmarks/).
 
 ---
 
