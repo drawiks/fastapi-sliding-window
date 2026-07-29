@@ -35,6 +35,8 @@ dev = [
     "httpx>=0.25",
     "httpx2>=2.0.0",
     "uvicorn>=0.23",
+    "pre-commit>=3.0",
+    "mypy>=2.0",
 ]
 
 [project.urls]
