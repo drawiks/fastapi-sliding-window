@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import FastAPI, Depends
+from fastapi import Depends, FastAPI
 from starlette.testclient import TestClient
 
-from fastapi_sliding_window import Algorithm, RateLimit
+from fastapi_sliding_window import Algorithm, Limiter, RateLimit
+from fastapi_sliding_window._backends.memory import InMemoryBackend
 
 
 async def async_key(request) -> str:
@@ -19,28 +20,72 @@ def app() -> FastAPI:
     async def test_endpoint():
         return {"status": "ok"}
 
-    @app.get("/fixed", dependencies=[Depends(RateLimit(requests=2, window_seconds=60.0, algorithm=Algorithm.FIXED_WINDOW))])
+    @app.get(
+        "/fixed",
+        dependencies=[Depends(RateLimit(requests=2, window_seconds=60.0, algorithm=Algorithm.FIXED_WINDOW))],
+    )
     async def fixed_endpoint():
         return {"status": "ok"}
 
-    @app.get("/counter", dependencies=[Depends(RateLimit(requests=2, window_seconds=60.0, algorithm=Algorithm.SLIDING_WINDOW_COUNTER))])
+    @app.get(
+        "/counter",
+        dependencies=[
+            Depends(
+                RateLimit(
+                    requests=2,
+                    window_seconds=60.0,
+                    algorithm=Algorithm.SLIDING_WINDOW_COUNTER,
+                )
+            )
+        ],
+    )
     async def counter_endpoint():
         return {"status": "ok"}
 
-    @app.get("/custom-key", dependencies=[Depends(RateLimit(requests=2, window_seconds=60.0, key_func=lambda r: "constant"))])
+    @app.get(
+        "/custom-key",
+        dependencies=[Depends(RateLimit(requests=2, window_seconds=60.0, key_func=lambda r: "constant"))],
+    )
     async def custom_key_endpoint():
         return {"status": "ok"}
 
-    @app.get("/no-headers", dependencies=[Depends(RateLimit(requests=1, window_seconds=60.0, include_headers=False))])
+    @app.get(
+        "/no-headers",
+        dependencies=[Depends(RateLimit(requests=1, window_seconds=60.0, include_headers=False))],
+    )
     async def no_headers_endpoint():
         return {"status": "ok"}
 
-    @app.get("/custom-detail", dependencies=[Depends(RateLimit(requests=1, window_seconds=60.0, detail="Custom error"))])
+    @app.get(
+        "/custom-detail",
+        dependencies=[Depends(RateLimit(requests=1, window_seconds=60.0, detail="Custom error"))],
+    )
     async def custom_detail_endpoint():
         return {"status": "ok"}
 
-    @app.get("/async-key", dependencies=[Depends(RateLimit(requests=2, window_seconds=60.0, key_func=async_key))])
+    @app.get(
+        "/async-key",
+        dependencies=[Depends(RateLimit(requests=2, window_seconds=60.0, key_func=async_key))],
+    )
     async def async_key_endpoint():
+        return {"status": "ok"}
+
+    @app.get("/str-limit", dependencies=[Depends(RateLimit(requests="5/hour"))])
+    async def str_limit_endpoint():
+        return {"status": "ok"}
+
+    @app.get(
+        "/cost-int",
+        dependencies=[Depends(RateLimit(requests=2, window_seconds=60.0, cost=2))],
+    )
+    async def cost_int_endpoint():
+        return {"status": "ok"}
+
+    @app.get(
+        "/ietf",
+        dependencies=[Depends(RateLimit(requests=3, window_seconds=60.0, use_ietf_headers=True))],
+    )
+    async def ietf_endpoint():
         return {"status": "ok"}
 
     return app
@@ -149,3 +194,85 @@ class TestDependency:
         assert "X-RateLimit-Remaining" in response.headers
         assert "X-RateLimit-Reset" in response.headers
         assert response.headers["X-RateLimit-Limit"] == "3"
+
+    def test_requests_as_string(self, app: FastAPI) -> None:
+        client = TestClient(app)
+        for _ in range(5):
+            response = client.get("/str-limit")
+            assert response.status_code == 200
+        response = client.get("/str-limit")
+        assert response.status_code == 429
+
+    def test_cost_int(self, app: FastAPI) -> None:
+        client = TestClient(app)
+        response = client.get("/cost-int")
+        assert response.status_code == 200
+        response = client.get("/cost-int")
+        assert response.status_code == 429
+
+    def test_use_ietf_headers(self, app: FastAPI) -> None:
+        client = TestClient(app)
+        response = client.get("/ietf")
+        assert "RateLimit-Limit" in response.headers
+        assert "X-RateLimit-Limit" not in response.headers
+
+
+class TestLimiterDelegation:
+    def test_rate_limit_with_limiter(self) -> None:
+        backend = InMemoryBackend()
+        limiter = Limiter(backend=backend)
+        app = FastAPI()
+
+        @app.get("/test", dependencies=[Depends(RateLimit(limiter=limiter))])
+        async def endpoint() -> dict:
+            return {"ok": True}
+
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+
+    def test_rate_limit_with_limiter_and_endpoint_rules(self) -> None:
+        backend = InMemoryBackend()
+        limiter = Limiter(backend=backend)
+        app = FastAPI()
+
+        @app.get("/test", dependencies=[Depends(RateLimit(limiter=limiter))])
+        @limiter.limit("1/sec")
+        async def endpoint() -> dict:
+            return {"ok": True}
+
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+        response = client.get("/test")
+        assert response.status_code == 429
+
+    def test_rate_limit_with_limiter_default_limits(self) -> None:
+        backend = InMemoryBackend()
+        limiter = Limiter(backend=backend, default_limits=["1/sec"])
+        app = FastAPI()
+
+        @app.get("/test", dependencies=[Depends(RateLimit(limiter=limiter))])
+        async def endpoint() -> dict:
+            return {"ok": True}
+
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+        response = client.get("/test")
+        assert response.status_code == 429
+
+    def test_rate_limit_with_limiter_exempt_when(self) -> None:
+        backend = InMemoryBackend()
+        limiter = Limiter(backend=backend)
+        app = FastAPI()
+
+        @app.get("/test", dependencies=[Depends(RateLimit(limiter=limiter))])
+        @limiter.limit("1/sec", exempt_when=lambda r: True)
+        async def endpoint() -> dict:
+            return {"ok": True}
+
+        client = TestClient(app)
+        for _ in range(3):
+            response = client.get("/test")
+            assert response.status_code == 200

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from fastapi_sliding_window._backends.memory import InMemoryBackend
 
 
@@ -25,7 +26,7 @@ async def test_blocks_after_limit() -> None:
 @pytest.mark.asyncio
 async def test_window_expiry() -> None:
     backend = InMemoryBackend()
-    for i in range(3):
+    for _ in range(3):
         await backend.check("key", limit=3, window=5.0, now=100.0)
 
     result = await backend.check("key", limit=3, window=5.0, now=105.1)
@@ -35,7 +36,7 @@ async def test_window_expiry() -> None:
 @pytest.mark.asyncio
 async def test_reset() -> None:
     backend = InMemoryBackend()
-    for i in range(3):
+    for _ in range(3):
         await backend.check("key", limit=3, window=10.0, now=100.0)
 
     await backend.reset("key")
