@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from asyncio import Lock
 import math
+from asyncio import Lock
 
 from fastapi_sliding_window._backends.base import RateLimitBackend, RateLimitResult
 
@@ -11,30 +11,39 @@ class FixedWindowBackend(RateLimitBackend):
         self._data: dict[str, tuple[float, int]] = {}
         self._lock = Lock()
 
-    async def check(self, key: str, limit: int, window: float, now: float) -> RateLimitResult:
+    async def check(self, key: str, limit: int, window: float, now: float, cost: int = 1) -> RateLimitResult:
         async with self._lock:
-            return self._check_locked(key, limit, window, now)
+            return self._check_locked(key, limit, window, now, cost)
 
-    def _check_locked(self, key: str, limit: int, window: float, now: float) -> RateLimitResult:
+    def _check_locked(self, key: str, limit: int, window: float, now: float, cost: int) -> RateLimitResult:
+        if limit <= 0:
+            return RateLimitResult(
+                allowed=False,
+                remaining=0,
+                limit=limit,
+                reset_at=math.ceil(now + window),
+                retry_after=window,
+            )
         window_start = self._window_start(now, window)
         reset_at = math.ceil(window_start + window)
 
         stored_start, count = self._data.get(key, (0.0, 0))
 
         if stored_start != window_start:
-            self._data[key] = (window_start, 1)
+            self._data[key] = (window_start, cost)
+            new_count = cost
             return RateLimitResult(
                 allowed=True,
-                remaining=limit - 1,
+                remaining=max(0, limit - new_count),
                 limit=limit,
                 reset_at=reset_at,
             )
 
-        if count < limit:
-            self._data[key] = (window_start, count + 1)
+        if count + cost <= limit:
+            self._data[key] = (window_start, count + cost)
             return RateLimitResult(
                 allowed=True,
-                remaining=limit - count - 1,
+                remaining=limit - count - cost,
                 limit=limit,
                 reset_at=reset_at,
             )

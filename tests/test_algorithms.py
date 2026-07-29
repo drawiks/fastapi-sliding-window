@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import pytest
+
 from fastapi_sliding_window._algorithms.fixed_window import FixedWindowBackend
-from fastapi_sliding_window._algorithms.sliding_window_counter import SlidingWindowCounterBackend
-from fastapi_sliding_window._algorithms.sliding_window_log import SlidingWindowLogBackend
+from fastapi_sliding_window._algorithms.gcra import GCRABackend
+from fastapi_sliding_window._algorithms.sliding_window_counter import (
+    SlidingWindowCounterBackend,
+)
+from fastapi_sliding_window._algorithms.sliding_window_log import (
+    SlidingWindowLogBackend,
+)
+from fastapi_sliding_window._algorithms.token_bucket import TokenBucketBackend
 
 
 @pytest.mark.asyncio
@@ -42,7 +49,7 @@ async def test_window_expiry_allows_new_requests() -> None:
 @pytest.mark.asyncio
 async def test_reset_clears_key() -> None:
     backend = SlidingWindowLogBackend()
-    for i in range(3):
+    for _ in range(3):
         await backend.check("key", limit=3, window=10.0, now=100.0)
 
     await backend.reset("key")
@@ -54,7 +61,7 @@ async def test_reset_clears_key() -> None:
 @pytest.mark.asyncio
 async def test_different_keys_are_independent() -> None:
     backend = SlidingWindowLogBackend()
-    for i in range(3):
+    for _ in range(3):
         await backend.check("a", limit=3, window=10.0, now=100.0)
 
     result_a = await backend.check("a", limit=3, window=10.0, now=100.0)
@@ -157,3 +164,114 @@ async def test_sliding_window_counter_reset_clears_key() -> None:
     await backend.reset("key")
     result = await backend.check("key", limit=3, window=10.0, now=100.0)
     assert result.allowed is True
+
+
+@pytest.mark.asyncio
+async def test_token_bucket_allows_within_limit() -> None:
+    backend = TokenBucketBackend()
+    result = await backend.check("key", limit=3, window=10.0, now=100.0)
+    assert result.allowed is True
+    assert result.remaining == 2
+
+
+@pytest.mark.asyncio
+async def test_token_bucket_blocks_after_limit() -> None:
+    backend = TokenBucketBackend()
+    for _ in range(3):
+        result = await backend.check("key", limit=3, window=10.0, now=100.0)
+        assert result.allowed is True
+    result = await backend.check("key", limit=3, window=10.0, now=100.0)
+    assert result.allowed is False
+    assert result.remaining == 0
+
+
+@pytest.mark.asyncio
+async def test_token_bucket_burst() -> None:
+    backend = TokenBucketBackend(burst=10)
+    for _ in range(10):
+        result = await backend.check("key", limit=3, window=10.0, now=100.0)
+        assert result.allowed is True
+    result = await backend.check("key", limit=3, window=10.0, now=100.0)
+    assert result.allowed is False
+
+
+@pytest.mark.asyncio
+async def test_token_bucket_reset() -> None:
+    backend = TokenBucketBackend()
+    for _ in range(3):
+        await backend.check("key", limit=3, window=10.0, now=100.0)
+    await backend.reset("key")
+    result = await backend.check("key", limit=3, window=10.0, now=100.0)
+    assert result.allowed is True
+
+
+@pytest.mark.asyncio
+async def test_token_bucket_refill() -> None:
+    backend = TokenBucketBackend()
+    for _ in range(3):
+        await backend.check("key", limit=3, window=10.0, now=100.0)
+    result = await backend.check("key", limit=3, window=10.0, now=110.0)
+    assert result.allowed is True
+
+
+@pytest.mark.asyncio
+async def test_gcra_allows_within_limit() -> None:
+    backend = GCRABackend()
+    result = await backend.check("key", limit=3, window=10.0, now=100.0)
+    assert result.allowed is True
+    assert result.remaining == 2
+
+
+@pytest.mark.asyncio
+async def test_gcra_blocks_after_limit() -> None:
+    backend = GCRABackend()
+    for _ in range(3):
+        result = await backend.check("key", limit=3, window=10.0, now=100.0)
+        assert result.allowed is True
+    result = await backend.check("key", limit=3, window=10.0, now=100.0)
+    assert result.allowed is False
+    assert result.remaining == 0
+
+
+@pytest.mark.asyncio
+async def test_gcra_burst() -> None:
+    backend = GCRABackend(burst=10)
+    for _ in range(10):
+        result = await backend.check("key", limit=3, window=10.0, now=100.0)
+        assert result.allowed is True
+    result = await backend.check("key", limit=3, window=10.0, now=100.0)
+    assert result.allowed is False
+
+
+@pytest.mark.asyncio
+async def test_gcra_reset() -> None:
+    backend = GCRABackend()
+    for _ in range(3):
+        await backend.check("key", limit=3, window=10.0, now=100.0)
+    await backend.reset("key")
+    result = await backend.check("key", limit=3, window=10.0, now=100.0)
+    assert result.allowed is True
+
+
+@pytest.mark.asyncio
+async def test_gcra_tat_resets_on_window_expiry() -> None:
+    backend = GCRABackend()
+    for _ in range(3):
+        await backend.check("key", limit=3, window=10.0, now=100.0)
+    result = await backend.check("key", limit=3, window=10.0, now=110.0)
+    assert result.allowed is True
+
+
+@pytest.mark.asyncio
+async def test_limit_zero_denies_all() -> None:
+    backends = [
+        SlidingWindowLogBackend(),
+        FixedWindowBackend(),
+        SlidingWindowCounterBackend(),
+        TokenBucketBackend(),
+        GCRABackend(),
+    ]
+    for backend in backends:
+        result = await backend.check("key", limit=0, window=60.0, now=100.0)
+        assert result.allowed is False
+        assert result.remaining == 0

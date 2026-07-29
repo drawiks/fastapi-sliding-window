@@ -5,8 +5,14 @@ from collections.abc import Awaitable
 from starlette.requests import Request
 
 from fastapi_sliding_window._algorithms.fixed_window import FixedWindowBackend
-from fastapi_sliding_window._algorithms.sliding_window_counter import SlidingWindowCounterBackend
-from fastapi_sliding_window._algorithms.sliding_window_log import SlidingWindowLogBackend
+from fastapi_sliding_window._algorithms.gcra import GCRABackend
+from fastapi_sliding_window._algorithms.sliding_window_counter import (
+    SlidingWindowCounterBackend,
+)
+from fastapi_sliding_window._algorithms.sliding_window_log import (
+    SlidingWindowLogBackend,
+)
+from fastapi_sliding_window._algorithms.token_bucket import TokenBucketBackend
 from fastapi_sliding_window._backends.base import RateLimitBackend
 from fastapi_sliding_window._types import Algorithm, KeyFunc
 
@@ -15,14 +21,38 @@ def default_key_func(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def make_backend(algorithm: Algorithm) -> RateLimitBackend:
+def make_backend(algorithm: Algorithm, burst: int | None = None) -> RateLimitBackend:
     if algorithm == Algorithm.SLIDING_WINDOW_LOG:
         return SlidingWindowLogBackend()
     if algorithm == Algorithm.SLIDING_WINDOW_COUNTER:
         return SlidingWindowCounterBackend()
     if algorithm == Algorithm.FIXED_WINDOW:
         return FixedWindowBackend()
+    if algorithm == Algorithm.GCRA:
+        return GCRABackend(burst=burst)
+    if algorithm == Algorithm.TOKEN_BUCKET:
+        return TokenBucketBackend(burst=burst)
     raise ValueError(f"Unknown algorithm: {algorithm}")
+
+
+def from_url(
+    url: str,
+    algorithm: str = "sliding_window_log",
+    key_prefix: str = "rl:",
+    burst: int | None = None,
+) -> RateLimitBackend:
+    if url.startswith(("redis://", "rediss://", "redis+unix://")):
+        from fastapi_sliding_window._backends.redis import RedisBackend
+
+        return RedisBackend(url, algorithm=algorithm, key_prefix=key_prefix, burst=burst)
+    if url == "memory://":
+        from fastapi_sliding_window._backends.memory import InMemoryBackend
+
+        return InMemoryBackend(
+            algorithm=Algorithm(algorithm) if isinstance(algorithm, str) else algorithm,
+            burst=burst,
+        )
+    raise ValueError(f"Unknown backend URL: {url!r}")
 
 
 async def resolve_key(request: Request, key_func: KeyFunc) -> str:

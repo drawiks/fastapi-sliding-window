@@ -4,7 +4,8 @@ import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
-from fastapi_sliding_window import Algorithm, RateLimitMiddleware
+from fastapi_sliding_window import Algorithm, Limiter, RateLimitMiddleware
+from fastapi_sliding_window._backends.memory import InMemoryBackend
 
 
 @pytest.fixture
@@ -50,7 +51,12 @@ class TestMiddleware:
         assert response.headers["X-RateLimit-Remaining"] == "4"
 
     def test_exclude_paths(self, app: FastAPI) -> None:
-        app.add_middleware(RateLimitMiddleware, requests=1, window_seconds=60.0, exclude_paths=["/test"])
+        app.add_middleware(
+            RateLimitMiddleware,
+            requests=1,
+            window_seconds=60.0,
+            exclude_paths=["/test"],
+        )
         client = TestClient(app)
 
         for _ in range(5):
@@ -108,7 +114,12 @@ class TestMiddleware:
         assert response.json()["detail"] == "Custom error"
 
     def test_fixed_window_algorithm(self, app: FastAPI) -> None:
-        app.add_middleware(RateLimitMiddleware, requests=2, window_seconds=60.0, algorithm=Algorithm.FIXED_WINDOW)
+        app.add_middleware(
+            RateLimitMiddleware,
+            requests=2,
+            window_seconds=60.0,
+            algorithm=Algorithm.FIXED_WINDOW,
+        )
         client = TestClient(app)
         response = client.get("/test")
         assert response.status_code == 200
@@ -117,13 +128,72 @@ class TestMiddleware:
         response = client.get("/test")
         assert response.status_code == 429
 
+    def test_cost_int(self, app: FastAPI) -> None:
+        app.add_middleware(RateLimitMiddleware, requests=2, window_seconds=60.0, cost=2)
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+        response = client.get("/test")
+        assert response.status_code == 429
+
+    def test_requests_as_string(self, app: FastAPI) -> None:
+        app.add_middleware(RateLimitMiddleware, requests="5/hour")
+        client = TestClient(app)
+        for _ in range(5):
+            response = client.get("/test")
+            assert response.status_code == 200
+        response = client.get("/test")
+        assert response.status_code == 429
+
+    def test_use_ietf_headers(self, app: FastAPI) -> None:
+        app.add_middleware(RateLimitMiddleware, requests=3, window_seconds=60.0, use_ietf_headers=True)
+        client = TestClient(app)
+        response = client.get("/test")
+        assert "RateLimit-Limit" in response.headers
+        assert "X-RateLimit-Limit" not in response.headers
+
     def test_sliding_window_counter_algorithm(self, app: FastAPI) -> None:
         app.add_middleware(
-            RateLimitMiddleware, requests=2, window_seconds=60.0, algorithm=Algorithm.SLIDING_WINDOW_COUNTER
+            RateLimitMiddleware,
+            requests=2,
+            window_seconds=60.0,
+            algorithm=Algorithm.SLIDING_WINDOW_COUNTER,
         )
         client = TestClient(app)
         response = client.get("/test")
         assert response.status_code == 200
+        response = client.get("/test")
+        assert response.status_code == 200
+        response = client.get("/test")
+        assert response.status_code == 429
+
+
+class TestMiddlewareLimiterDelegation:
+    def test_middleware_with_limiter_allows(self) -> None:
+        backend = InMemoryBackend()
+        limiter = Limiter(backend=backend)
+        app = FastAPI()
+
+        @app.get("/test")
+        async def endpoint() -> dict:
+            return {"ok": True}
+
+        app.add_middleware(RateLimitMiddleware, limiter=limiter)
+        client = TestClient(app)
+        response = client.get("/test")
+        assert response.status_code == 200
+
+    def test_middleware_with_limiter_default_limits_blocks(self) -> None:
+        backend = InMemoryBackend()
+        limiter = Limiter(backend=backend, default_limits=["1/sec"])
+        app = FastAPI()
+
+        @app.get("/test")
+        async def endpoint() -> dict:
+            return {"ok": True}
+
+        app.add_middleware(RateLimitMiddleware, limiter=limiter)
+        client = TestClient(app)
         response = client.get("/test")
         assert response.status_code == 200
         response = client.get("/test")
