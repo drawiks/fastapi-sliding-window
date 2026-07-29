@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from time import monotonic
+from time import time
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
@@ -91,7 +91,7 @@ async def test_fallback_uses_fallback_when_circuit_open() -> None:
     backend = RedisWithFallbackBackend.__new__(RedisWithFallbackBackend)
     backend._redis = cast(Any, redis)
     backend._fallback = fallback
-    backend._circuit = CircuitState(failures=5, state="open", last_open=monotonic())
+    backend._circuit = CircuitState(failures=5, state="open", last_open=time())
     backend._threshold = 5
     backend._recovery = 30.0
     backend._lock = asyncio.Lock()
