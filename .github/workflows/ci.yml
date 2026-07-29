@@ -77,7 +77,7 @@ jobs:
         if: steps.tag_check.outputs.exists == 'false'
         run: |
           git checkout main
-          git merge --no-ff origin/develop -m "chore: merge develop into main"
+          git merge --no-ff -X theirs origin/develop -m "chore: merge develop into main"
           git push origin main
 
       - name: Install build tools
