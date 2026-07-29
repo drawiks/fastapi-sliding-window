@@ -65,6 +65,9 @@ class Limiter:
         items: list[RateLimitItem],
         cost: int | Callable[[Request], int] = 1,
         key_func: KeyFunc | None = None,
+        *,
+        include_headers: bool | None = None,
+        use_ietf: bool | None = None,
     ) -> None:
         if getattr(request.scope.get("endpoint"), "_rate_limit_exempt", False):
             return
@@ -73,8 +76,10 @@ class Limiter:
         for defaults in self._default_limits:
             all_items.extend(defaults)
         result = await self._check_items(request, response, key, all_items, cost)
-        if self._include_headers and result is not None:
-            for h, v in rate_limit_headers(result, self._use_ietf).items():
+        effective_include = include_headers if include_headers is not None else self._include_headers
+        effective_ietf = use_ietf if use_ietf is not None else self._use_ietf
+        if effective_include and result is not None:
+            for h, v in rate_limit_headers(result, effective_ietf).items():
                 response.headers[h] = v
 
     async def check_rules(
@@ -89,29 +94,43 @@ class Limiter:
                 Callable[[Request], bool] | None,
             ]
         ],
+        *,
+        include_headers: bool | None = None,
+        use_ietf: bool | None = None,
     ) -> None:
+        effective_include = include_headers if include_headers is not None else self._include_headers
+        effective_ietf = use_ietf if use_ietf is not None else self._use_ietf
         if getattr(request.scope.get("endpoint"), "_rate_limit_exempt", False):
             return
         had_rule = False
         result = None
+        _key_cache: dict[KeyFunc, str] = {}
         for items, cost, key_func, exempt_when in rules:
             had_rule = True
             if exempt_when and exempt_when(request):
                 continue
-            key = await resolve_key(request, key_func or self._key_func)
+            kf = key_func or self._key_func
+            if kf not in _key_cache:
+                _key_cache[kf] = await resolve_key(request, kf)
+            key = _key_cache[kf]
             all_items = list(items)
             for defaults in self._default_limits:
                 all_items.extend(defaults)
             if not all_items:
                 continue
-            result = await self._check_items(request, response, key, all_items, cost)
+            result = await self._check_items(request, response, key, all_items, cost, effective_include, effective_ietf)
         if not had_rule and self._default_limits:
-            key = await resolve_key(request, self._key_func)
+            kf = self._key_func
+            if kf not in _key_cache:
+                _key_cache[kf] = await resolve_key(request, kf)
+            key = _key_cache[kf]
             for defaults in self._default_limits:
                 if defaults:
-                    result = await self._check_items(request, response, key, defaults, 1)
-        if self._include_headers and result is not None:
-            for h, v in rate_limit_headers(result, self._use_ietf).items():
+                    result = await self._check_items(
+                        request, response, key, defaults, 1, effective_include, effective_ietf
+                    )
+        if effective_include and result is not None:
+            for h, v in rate_limit_headers(result, effective_ietf).items():
                 response.headers[h] = v
 
     async def _check_items(
@@ -121,15 +140,19 @@ class Limiter:
         key: str,
         items: list[RateLimitItem],
         cost: int | Callable[[Request], int],
+        include_headers: bool | None = None,
+        use_ietf: bool | None = None,
     ) -> RateLimitResult | None:
         now = monotonic()
         resolved_cost = cost(request) if callable(cost) else cost
-        result: RateLimitResult | None = None
+        effective_include = include_headers if include_headers is not None else self._include_headers
+        effective_ietf = use_ietf if use_ietf is not None else self._use_ietf
+        merged: RateLimitResult | None = None
         for item in items:
             item_key = f"{key}:{item.limit}:{item.window}"
             result = await self._backend.check(item_key, item.limit, item.window, now, cost=resolved_cost)
             if not result.allowed:
-                headers = rate_limit_headers(result, self._use_ietf) if self._include_headers else {}
+                headers = rate_limit_headers(result, effective_ietf) if effective_include else {}
                 exc = RateLimitExceeded(retry_after=result.retry_after or 0.0, headers=headers)
                 if self._on_breach:
                     response_obj = self._on_breach(request, exc)
@@ -139,4 +162,13 @@ class Limiter:
                         response.body = response_obj.body
                     return None
                 raise exc
-        return result
+            if merged is None:
+                merged = result
+            else:
+                merged = RateLimitResult(
+                    allowed=True,
+                    remaining=min(merged.remaining, result.remaining),
+                    limit=max(merged.limit, result.limit),
+                    reset_at=max(merged.reset_at, result.reset_at),
+                )
+        return merged

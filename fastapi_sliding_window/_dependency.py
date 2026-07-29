@@ -40,8 +40,6 @@ class RateLimit:
         self._cost = cost
 
         if limiter is not None:
-            limiter._include_headers = include_headers
-            limiter._use_ietf = use_ietf_headers
             self._requests: int | None = None
             self._window_seconds = 0.0
             return
@@ -66,7 +64,13 @@ class RateLimit:
         if self._limiter is not None:
             endpoint = request.scope.get("endpoint")
             rules = getattr(endpoint, "__rate_limit_rules__", []) if endpoint else []
-            await self._limiter.check_rules(request, response, rules)
+            await self._limiter.check_rules(
+                request,
+                response,
+                rules,
+                include_headers=self._include_headers,
+                use_ietf=self._use_ietf,
+            )
             return
 
         key = await resolve_key(request, self._key_func)
