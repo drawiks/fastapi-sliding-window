@@ -268,22 +268,31 @@ Provide a custom `key_func` that reads `X-Forwarded-For` or `X-Real-IP`:
 
 ```python
 from fastapi import Request
+from ipaddress import ip_network, ip_address
 
-TRUSTED_PROXIES = {"127.0.0.1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}
+TRUSTED_PROXY_NETWORKS = [
+    ip_network("10.0.0.0/8"),
+    ip_network("172.16.0.0/12"),
+    ip_network("192.168.0.0/16"),
+]
 
 def client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded and request.client.host in TRUSTED_PROXIES:
-        return forwarded.split(",")[0].strip()
-    if real_ip := request.headers.get("X-Real-IP"):
-        if request.client.host in TRUSTED_PROXIES:
+    client = request.client
+    if client is None:
+        return "unknown"
+    if any(client.host in net for net in TRUSTED_PROXY_NETWORKS if isinstance(net, ip_network)):
+        forwarded = request.headers.get("X-Forwarded-For", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
             return real_ip
-    return request.client.host or "unknown"
+    return client.host
 
 limiter = Limiter(backend=InMemoryBackend(), key_func=client_ip)
 ```
 
-**Security note:** Never trust `X-Forwarded-For` unconditionally - it can be spoofed. Validate that the request came from your proxy before trusting forwarded headers. The `TRUSTED_PROXIES` set should only contain IPs you control.
+**Security note:** Never trust `X-Forwarded-For` unconditionally - it can be spoofed. Validate that the request came from your proxy before trusting forwarded headers. The `TRUSTED_PROXY_NETWORKS` list should only contain networks you control.
 
 ---
 
@@ -403,8 +412,9 @@ Methods:
 - `@limiter.limit("100/hour", cost=1, key_func=None, exempt_when=None)` - decorator
 - `@limiter.exempt` - skip rate limiting
 - `await limiter.check(request, response, items)` - programmatic check
+- `await limiter.check_rules(request, response, rules)` - check rules from endpoint decorator
 
-### `RateLimit(requests, window_seconds, algorithm, key_func, include_headers, detail, backend, cost, limiter, use_ietf_headers)`
+### `RateLimit(requests, window_seconds, algorithm, key_func, include_headers, detail, backend, cost, limiter, use_ietf_headers, exempt_when)`
 
 FastAPI dependency for per-route rate limiting.
 
@@ -417,11 +427,12 @@ FastAPI dependency for per-route rate limiting.
 | `include_headers` | `bool` | `True` | add headers |
 | `detail` | `str` | `"Rate limit exceeded"` | 429 detail message |
 | `backend` | `RateLimitBackend` | `None` | custom backend |
-| `cost` | `int` | `1` | token cost per request |
+| `cost` | `int | Callable[[Request], int]` | `1` | token cost per request |
 | `limiter` | `Limiter` | `None` | delegate to Limiter |
 | `use_ietf_headers` | `bool` | `False` | IETF headers |
+| `exempt_when` | `Callable[[Request], bool] | None` | `None` | skip check if callable returns true |
 
-### `RateLimitMiddleware(app, requests, window_seconds, algorithm, key_func, include_headers, exclude_paths, detail, backend, cost, limiter, use_ietf_headers)`
+### `RateLimitMiddleware(app, requests, window_seconds, algorithm, key_func, include_headers, exclude_paths, detail, backend, cost, limiter, use_ietf_headers, exempt_when)`
 
 Starlette middleware for global rate limiting.
 
@@ -435,17 +446,26 @@ Starlette middleware for global rate limiting.
 | `exclude_paths` | `list[str]` | `None` | paths to skip |
 | `detail` | `str` | `"Rate limit exceeded"` | 429 detail |
 | `backend` | `RateLimitBackend` | `None` | custom backend |
-| `cost` | `int` | `1` | token cost per request |
+| `cost` | `int | Callable[[Request], int]` | `1` | token cost per request |
 | `limiter` | `Limiter` | `None` | delegate to Limiter |
 | `use_ietf_headers` | `bool` | `False` | IETF headers |
+| `exempt_when` | `Callable[[Request], bool] | None` | `None` | skip check if callable returns true |
 
 ### `Algorithm` enum
 
 `SLIDING_WINDOW_LOG`, `SLIDING_WINDOW_COUNTER`, `FIXED_WINDOW`, `TOKEN_BUCKET`, `GCRA`
 
-### `from_url(url)`
+### `from_url(url, algorithm, key_prefix, burst, max_keys)`
 
-Factory: `"memory://"` → `InMemoryBackend`, `"redis://..."` → `RedisBackend`
+Factory function.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `url` | `str` | required | `"memory://"` → `InMemoryBackend`, `"redis://..."` → `RedisBackend` |
+| `algorithm` | `str` | `"sliding_window_log"` | algorithm name |
+| `key_prefix` | `str` | `"rl:"` | Redis key prefix |
+| `burst` | `int | None` | `None` | burst limit (Token Bucket / GCRA) |
+| `max_keys` | `int` | `10000` | max keys in in-memory backends |
 
 ### Utility functions
 
